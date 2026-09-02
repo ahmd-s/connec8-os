@@ -1,0 +1,519 @@
+// Connec8 OS — Business Operating System Schema
+// Relational, normalized, expansion-ready architecture.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── USERS & TEAM ───────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("FOUNDER") // ADMIN | FOUNDER | MANAGER | DEVELOPER | DESIGNER | SALES | VIEWER
+  title     String? // e.g. "Co-founder & Engineering"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leadAssignments    Lead[]          @relation("LeadAssignee")
+  featureAssignments SaasFeature[]   @relation("FeatureAssignee")
+  taskAssignments    ProjectTask[]   @relation("TaskAssignee")
+  createdPitches     Pitch[]         @relation("PitchCreator")
+  authoredKnowledge  KnowledgeItem[] @relation("KnowledgeAuthor")
+  activities         Activity[]      @relation("ActivityUser")
+  outreaches         Outreach[]      @relation("OutreachOwner")
+}
+
+// ─────────────────────────── AGENCY LEADS / CRM ───────────────────────────
+
+model Lead {
+  id            String  @id @default(cuid())
+  businessName  String
+  contactPerson String?
+  jobTitle      String?
+  website       String?
+  industry      String?
+  location      String?
+  companySize   String?
+  source        String? // GOOGLE_MAPS | LINKEDIN | REFERRAL | WEBSITE | WALK_IN | INSTAGRAM | REDDIT | OTHER
+
+  stage    String @default("LEAD_FOUND")
+  // LEAD_FOUND | RESEARCHING | OPPORTUNITY_IDENTIFIED | PITCH_PREPARED | CONTACTED
+  // AWAITING_REPLY | REPLIED | ACTIVE_CONVERSATION | MEETING | PROPOSAL_SENT | NEGOTIATING | WON | LOST
+  priority String @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+
+  whyTargeted String?
+  pitchAngle  String?
+  problems    String? // JSON string[] — identified problems
+  notes       String?
+
+  email        String?
+  phone        String?
+  whatsapp     String?
+  linkedin     String?
+  instagram    String?
+  otherContact String?
+
+  lastActivityAt    DateTime  @default(now())
+  nextFollowUpAt    DateTime?
+  convertedClientId String?
+
+  assignedToId String?
+  assignedTo   User?   @relation("LeadAssignee", fields: [assignedToId], references: [id])
+
+  followUps   FollowUp[]
+  outreaches  Outreach[]
+  pitches     Pitch[]
+  meetings    Meeting[]
+  contacts    Contact[]
+  attachments Attachment[]
+  activities  Activity[] @relation("LeadActivities")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clients   Client[]
+
+  @@index([stage])
+  @@index([lastActivityAt])
+}
+
+model Contact {
+  id          String  @id @default(cuid())
+  name        String
+  company     String?
+  role        String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+  linkedin    String?
+  socialOther String?
+  notes       String?
+
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id])
+  clientId   String?
+  client     Client?   @relation(fields: [clientId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead? @relation(fields: [saasLeadId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Polymorphic chronological event log (no FK by design for write throughput)
+model Activity {
+  id          String   @id @default(cuid())
+  type        String // LEAD_DISCOVERED | RESEARCH | WEBSITE_ANALYSED | PITCH_CREATED | EMAIL_SENT | WHATSAPP_SENT
+  // LINKEDIN_SENT | CALL | VISIT | MEETING | DEMO | FOLLOW_UP | FOLLOW_UP_DONE | PROPOSAL
+  // REPLY | NOTE | STAGE_CHANGED | PITCH_STATUS | FEATURE_UPDATE | OUTREACH | VISIT_LOGGED | OTHER
+  title       String?
+  description String
+  date        DateTime @default(now())
+
+  userId String?
+  user   User?   @relation("ActivityUser", fields: [userId], references: [id])
+
+  leadId     String?
+  lead       Lead?        @relation("LeadActivities", fields: [leadId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead?    @relation("SaasLeadActivities", fields: [saasLeadId], references: [id])
+  productId  String?
+  product    SaasProduct? @relation("ProductActivities", fields: [productId], references: [id])
+  clientId   String?
+  client     Client?      @relation("ClientActivities", fields: [clientId], references: [id])
+  projectId  String?
+  project    Project?     @relation("ProjectActivities", fields: [projectId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([saasLeadId])
+  @@index([productId])
+}
+
+// ─────────────────────────── FOLLOW-UPS ───────────────────────────
+
+model FollowUp {
+  id                  String   @id @default(cuid())
+  title               String
+  dueDate             DateTime
+  method              String // EMAIL | WHATSAPP | PHONE | LINKEDIN | INSTAGRAM | VISIT | MEETING | DEMO | OTHER
+  reason              String?
+  context             String?
+  suggestedNextAction String?
+
+  status      String    @default("UPCOMING") // UPCOMING | COMPLETED | CANCELLED
+  completedAt DateTime?
+
+  leadId     String?
+  lead       Lead?        @relation(fields: [leadId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead?    @relation(fields: [saasLeadId], references: [id])
+  clientId   String?
+  client     Client?      @relation(fields: [clientId], references: [id])
+  productId  String?
+  product    SaasProduct? @relation(fields: [productId], references: [id])
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([dueDate])
+  @@index([status])
+}
+
+// ─────────────────────────── OUTREACH ───────────────────────────
+
+model Outreach {
+  id               String   @id @default(cuid())
+  channel          String // COLD_EMAIL | LINKEDIN | WHATSAPP | INSTAGRAM | REDDIT | PHONE | REFERRAL | VISIT | OTHER
+  mode             String   @default("ONLINE") // ONLINE | OFFLINE
+  date             DateTime @default(now())
+  message          String?
+  status           String   @default("SENT") // SENT | DELIVERED | REPLIED | POSITIVE | NEGATIVE | MEETING_BOOKED | NO_RESPONSE
+  response         String?
+  followUpRequired Boolean  @default(false)
+
+  // Offline visit detail
+  whoMet             String?
+  whatWasDiscussed   String?
+  whatTheySaid       String?
+  problemsIdentified String?
+  objections         String?
+  featuresLiked      String?
+  featuresRequested  String?
+  interest           String? // YES | NO | MAYBE
+  nextAction         String?
+  outcome            String?
+
+  leadId     String?
+  lead       Lead?        @relation(fields: [leadId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead?    @relation(fields: [saasLeadId], references: [id])
+  productId  String?
+  product    SaasProduct? @relation(fields: [productId], references: [id])
+
+  userId String?
+  user   User?   @relation("OutreachOwner", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channel])
+}
+
+// ─────────────────────────── PITCH LIBRARY ───────────────────────────
+
+model Pitch {
+  id     String   @id @default(cuid())
+  title  String
+  type   String // WEBSITE_CONCEPT | WEBSITE_REDESIGN | SOFTWARE_IDEA | AI_SOLUTION | LANDING_PAGE | PRESENTATION | PROPOSAL
+  status String   @default("DRAFT") // DRAFT | READY | SENT | VIEWED | DISCUSSING | WON | LOST
+  link   String?
+  notes  String?
+  date   DateTime @default(now())
+
+  creatorId String?
+  creator   User?   @relation("PitchCreator", fields: [creatorId], references: [id])
+
+  leadId     String?
+  lead       Lead?        @relation(fields: [leadId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead?    @relation(fields: [saasLeadId], references: [id])
+  productId  String?
+  product    SaasProduct? @relation(fields: [productId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────── PRODUCTS & SAAS ───────────────────────────
+
+model SaasProduct {
+  id          String  @id @default(cuid())
+  name        String
+  tagline     String?
+  description String?
+  status      String  @default("ACTIVE") // ACTIVE | PAUSED | ARCHIVED
+  accent      String  @default("#059669") // UI accent
+
+  features    SaasFeature[]
+  saasLeads   SaasLead[]
+  saasClients SaasClient[]
+  followUps   FollowUp[]
+  pitches     Pitch[]
+  outreaches  Outreach[]
+  knowledge   KnowledgeItem[]
+  activities  Activity[] @relation("ProductActivities")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  meetings  Meeting[]
+}
+
+model SaasFeature {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  whyItMatters    String?
+  area            String? // free-form product area e.g. "Appointments", "Billing"
+  priority        String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  status          String    @default("IDEA")
+  // IDEA | RESEARCHING | PLANNED | READY_TO_BUILD | IN_DEVELOPMENT | BLOCKED | TESTING | COMPLETED | REJECTED
+  effort          String? // XS | S | M | L | XL
+  weight          Int       @default(3) // contribution to weighted progress (auto-suggested from effort)
+  dependencies    String?
+  whyNotCompleted String? // structured reason: WAITING_DEVELOPER | TECHNICAL_DIFFICULTY | LACK_OF_CLARITY | LOWER_PRIORITY | WAITING_CLIENT | DEPENDENCY | NO_BUDGET | NEEDS_RESEARCH | OTHER
+  blockingDetail  String? // free text detail
+  nextStep        String?
+  completedAt     DateTime?
+  notes           String?
+  dateAdded       DateTime  @default(now())
+
+  productId String
+  product   SaasProduct @relation(fields: [productId], references: [id])
+
+  assigneeId String?
+  assignee   User?   @relation("FeatureAssignee", fields: [assigneeId], references: [id])
+
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, status])
+}
+
+model SaasLead {
+  id            String  @id @default(cuid())
+  businessName  String
+  location      String?
+  contactPerson String?
+  role          String?
+  phone         String?
+  email         String?
+  website       String?
+  social        String?
+
+  origin      String  @default("OFFLINE") // ONLINE | OFFLINE
+  funnelStage String  @default("LEAD") // LEAD | CONTACTED | REPLIED | INTERESTED | DEMO | TRIAL | CLIENT | LOST
+  interested  String? // YES | NO | MAYBE
+
+  requirements        String?
+  problems            String?
+  featuresRequested   String?
+  objections          String?
+  feedback            String?
+  questions           String?
+  importantStatements String?
+  notes               String?
+
+  lastActivityAt DateTime  @default(now())
+  nextFollowUpAt DateTime?
+
+  productId String
+  product   SaasProduct @relation(fields: [productId], references: [id])
+
+  followUps   FollowUp[]
+  outreaches  Outreach[]
+  pitches     Pitch[]
+  saasClient  SaasClient?
+  contacts    Contact[]
+  attachments Attachment[]
+  activities  Activity[] @relation("SaasLeadActivities")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  meetings  Meeting[]
+
+  @@index([productId, funnelStage])
+}
+
+model SaasClient {
+  id                 String    @id @default(cuid())
+  businessName       String
+  contactPerson      String?
+  email              String?
+  phone              String?
+  plan               String? // TRIAL | BASIC | PRO | ANNUAL
+  status             String    @default("ACTIVE") // TRIAL | ACTIVE | PAUSED | CHURNED
+  onboardingStatus   String? // NOT_STARTED | IN_PROGRESS | COMPLETED
+  featuresEnabled    String?
+  customRequirements String?
+  issues             String?
+  complaints         String?
+  feedback           String?
+  featureRequests    String?
+  notes              String?
+  onboardedAt        DateTime?
+
+  productId String
+  product   SaasProduct @relation(fields: [productId], references: [id])
+
+  saasLeadId String?   @unique
+  saasLead   SaasLead? @relation(fields: [saasLeadId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────── AGENCY CLIENTS & PROJECTS ───────────────────────────
+
+model Client {
+  id            String  @id @default(cuid())
+  name          String
+  industry      String?
+  website       String?
+  contactPerson String?
+  email         String?
+  phone         String?
+  status        String  @default("ACTIVE") // ACTIVE | PROSPECT | COMPLETED | CHURNED
+  notes         String?
+
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id])
+
+  projects  Project[]
+  followUps FollowUp[]
+  meetings  Meeting[]
+  contacts  Contact[]
+  activities Activity[] @relation("ClientActivities")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  type        String    @default("WEBSITE") // WEBSITE | REDESIGN | ECOMMERCE | SOFTWARE | AI | AUTOMATION | INTERNAL | OTHER
+  description String?
+  status      String    @default("PLANNING") // PLANNING | DESIGN | DEVELOPMENT | TESTING | CLIENT_REVIEW | COMPLETED
+  startDate   DateTime?
+  deadline    DateTime?
+  budget      Float?
+  team        String? // JSON string[] of userIds
+  links       String? // JSON [{label, url}]
+  decisions   String?
+  notes       String?
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  tasks    ProjectTask[]
+  meetings Meeting[]
+  activities Activity[] @relation("ProjectActivities")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectTask {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  priority    String    @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status      String    @default("TODO") // TODO | IN_PROGRESS | BLOCKED | DONE
+  deadline    DateTime?
+  notes       String?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+}
+
+// ─────────────────────────── MEETINGS ───────────────────────────
+
+model Meeting {
+  id            String    @id @default(cuid())
+  title         String
+  dateTime      DateTime
+  purpose       String?
+  participants  String? // JSON string[] names
+  notes         String?
+  decisions     String?
+  actionItems   String? // JSON [{text, done}]
+  nextMeetingAt DateTime?
+
+  leadId     String?
+  lead       Lead?        @relation(fields: [leadId], references: [id])
+  saasLeadId String?
+  saasLead   SaasLead?    @relation(fields: [saasLeadId], references: [id])
+  clientId   String?
+  client     Client?      @relation(fields: [clientId], references: [id])
+  productId  String?
+  product    SaasProduct? @relation(fields: [productId], references: [id])
+  projectId  String?
+  project    Project?     @relation(fields: [projectId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateTime])
+}
+
+// ─────────────────────────── KNOWLEDGE ───────────────────────────
+
+model KnowledgeItem {
+  id       String  @id @default(cuid())
+  title    String
+  content  String
+  category String  @default("GENERAL") // RESEARCH | IDEA | BUSINESS | COMPETITOR | SALES | TECHNICAL | RESOURCE | DECISION | GENERAL
+  tags     String? // JSON string[]
+  link     String?
+  pinned   Boolean @default(false)
+
+  authorId String?
+  author   User?   @relation("KnowledgeAuthor", fields: [authorId], references: [id])
+
+  productId  String?
+  product    SaasProduct? @relation(fields: [productId], references: [id])
+  leadId     String?
+  clientId   String?
+  projectId  String?
+  saasLeadId String?
+
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// ─────────────────────────── FILES & ATTACHMENTS ───────────────────────────
+
+model Attachment {
+  id           String  @id @default(cuid())
+  fileName     String
+  mimeType     String?
+  size         Int     @default(0)
+  path         String // on-disk storage path (uploads/)
+  entityType   String // LEAD | SAAS_LEAD | SAAS_FEATURE | KNOWLEDGE | PROJECT | CLIENT | PRODUCT | ACTIVITY
+  entityId     String
+  uploaderName String?
+
+  leadId      String?
+  lead        Lead?          @relation(fields: [leadId], references: [id])
+  saasLeadId  String?
+  saasLead    SaasLead?      @relation(fields: [saasLeadId], references: [id])
+  featureId   String?
+  feature     SaasFeature?   @relation(fields: [featureId], references: [id])
+  knowledgeId String?
+  knowledge   KnowledgeItem? @relation(fields: [knowledgeId], references: [id])
+
+  createdAt DateTime @default(now())
+}
