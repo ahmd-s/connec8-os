@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { mkdir, writeFile } from 'fs/promises'
-import path from 'path'
+import { saveFile } from '@/lib/storage'
 
 export const dynamic = 'force-dynamic'
-
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
 
 const ENTITY_FK: Record<string, string> = {
   LEAD: 'leadId',
@@ -41,11 +38,10 @@ export async function POST(req: NextRequest) {
     if (!file || !entityId) return NextResponse.json({ error: 'file and entityId are required' }, { status: 400 })
     if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'Max file size is 10MB' }, { status: 400 })
 
-    await mkdir(UPLOAD_DIR, { recursive: true })
     const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80)
     const stored = `${Date.now()}_${safeName}`
     const bytes = Buffer.from(await file.arrayBuffer())
-    await writeFile(path.join(UPLOAD_DIR, stored), bytes)
+    const storedPath = await saveFile(stored, bytes)
 
     const fk = ENTITY_FK[entityType]
     const att = await db.attachment.create({
@@ -53,7 +49,7 @@ export async function POST(req: NextRequest) {
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
         size: file.size,
-        path: stored,
+        path: storedPath,
         entityType,
         entityId,
         ...(fk ? { [fk]: entityId } : {}),

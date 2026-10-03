@@ -152,3 +152,19 @@ Work Log:
 
 Stage Summary:
 - Connec8 OS delivered and re-verified end-to-end. Project final.
+
+---
+Task ID: 5
+Agent: main (Super Z)
+Task: Vercel deployment readiness
+
+Work Log:
+- Audited stack vs Vercel constraints: Next.js routes/portable schema fine; SQLite DB file + disk uploads are the two hard blockers (ephemeral serverless FS); no postinstall prisma generate.
+- Added @vercel/blob; created src/lib/storage.ts (Blob when BLOB_READ_WRITE_TOKEN present, disk fallback locally); rewrote /api/files routes to save/proxy/delete via the abstraction; blob files stay private (proxied through the API).
+- package.json: added postinstall "prisma generate" + db:seed script. Added .env.example.
+- Schema datasource annotated with the one-line Postgres switch; confirmed schema is 100% provider-portable (no enums/Json/@db attrs) and seed.ts uses pure Prisma calls.
+- Wrote DEPLOYMENT.md: readiness table, Option A Neon+Blob step-by-step (15 min), Options B/C/D (Vercel Postgres/Supabase/Turso), post-deploy checklist (Deployment Protection/auth, backups, migrate flow, custom domain), env var reference.
+- Fixed lint (renamed useBlobStorage → blobStorageEnabled); verified upload→list→GET→DELETE cycle on the local fallback path; full bun run lint clean; app + dashboard API 200.
+
+Stage Summary:
+- Code is deployment-ready; only user action left: create hosted Postgres, flip provider line, set DATABASE_URL, deploy (all documented in DEPLOYMENT.md). Auth (Vercel Deployment Protection or NextAuth) flagged as recommended follow-up.

@@ -5,6 +5,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ⚠️ DEPLOYING TO VERCEL? Vercel's filesystem is ephemeral — SQLite will NOT
+// persist there. Before your production migration, change the provider below:
+//     provider = "postgresql"
+// and point DATABASE_URL at a hosted Postgres (Neon / Supabase / Vercel Postgres).
+// The rest of this schema is 100% portable — no enums, no provider-specific types.
+// Full step-by-step guide: DEPLOYMENT.md
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
