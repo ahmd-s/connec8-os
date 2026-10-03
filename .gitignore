@@ -52,3 +52,15 @@ prompt
 server.log
 # Skills directory
 /skills/
+# ── Connec8 OS: local runtime & sandbox artifacts (do not push) ──
+.env
+.env*.local
+/db/
+/uploads/
+/dev.log
+/server.log
+/.zscripts/
+/tool-results/
+/agent-ctx/
+/worklog.md
+/.vercel
