@@ -12,7 +12,7 @@ generator client {
 // The rest of this schema is 100% portable — no enums, no provider-specific types.
 // Full step-by-step guide: DEPLOYMENT.md
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
